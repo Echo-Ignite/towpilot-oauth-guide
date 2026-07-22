@@ -1,0 +1,398 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({startOnLoad:true, theme:"neutral"});</script>
+<title>OAuth 2.0 with TowPilot</title>
+<style>
+  :root {
+    --bg: #faf9f6;
+    --ink: #21252b;
+    --ink-soft: #575e68;
+    --ink-faint: #8a919c;
+    --accent: #c97e10;
+    --accent-ink: #9a5f06;
+    --line: #e4e1d9;
+    --card: #ffffff;
+    --code-bg: #23262c;
+    --code-ink: #dfe3e8;
+    --code-accent: #f0b24a;
+    --badge-bg: #f4ede0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191d;
+      --ink: #e6e8ea;
+      --ink-soft: #a8aeb7;
+      --ink-faint: #6f7681;
+      --accent: #f0a82a;
+      --accent-ink: #f0b24a;
+      --line: #2d3138;
+      --card: #1e2126;
+      --code-bg: #101215;
+      --code-ink: #d7dbe0;
+      --code-accent: #f0b24a;
+      --badge-bg: #2a2415;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17191d;
+    --ink: #e6e8ea;
+    --ink-soft: #a8aeb7;
+    --ink-faint: #6f7681;
+    --accent: #f0a82a;
+    --accent-ink: #f0b24a;
+    --line: #2d3138;
+    --card: #1e2126;
+    --code-bg: #101215;
+    --code-ink: #d7dbe0;
+    --code-accent: #f0b24a;
+    --badge-bg: #2a2415;
+  }
+  :root[data-theme="light"] {
+    --bg: #faf9f6;
+    --ink: #21252b;
+    --ink-soft: #575e68;
+    --ink-faint: #8a919c;
+    --accent: #c97e10;
+    --accent-ink: #9a5f06;
+    --line: #e4e1d9;
+    --card: #ffffff;
+    --code-bg: #23262c;
+    --code-ink: #dfe3e8;
+    --code-accent: #f0b24a;
+    --badge-bg: #f4ede0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 1.25rem;
+  }
+  main {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 3.5rem 0 5rem;
+  }
+  .eyebrow {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 0.75rem;
+  }
+  h1 {
+    font-size: clamp(1.8rem, 4.5vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 1.075rem;
+    color: var(--ink-soft);
+    margin: 0 0 0.5rem;
+    max-width: 38rem;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 3rem 0 0.75rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--line);
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin: 1.75rem 0 0.5rem;
+  }
+  p { margin: 0.7rem 0; }
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  ul, ol { padding-left: 1.4rem; margin: 0.7rem 0; }
+  li { margin: 0.35rem 0; }
+  li::marker { color: var(--accent); font-weight: 600; }
+
+  code {
+    font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--badge-bg);
+    color: var(--accent-ink);
+    border-radius: 4px;
+    padding: 0.12em 0.4em;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+    overflow-x: auto;
+    line-height: 1.55;
+    font-size: 0.85rem;
+    margin: 1rem 0;
+  }
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+  }
+  pre .hl { color: var(--code-accent); }
+
+  .steps {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .steps > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 3rem;
+    margin: 0;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 50%;
+    background: var(--badge-bg);
+    color: var(--accent-ink);
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .steps h3 { margin: 0 0 0.35rem; }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--card);
+    border-radius: 0 8px 8px 0;
+    padding: 0.85rem 1.15rem;
+    margin: 1.25rem 0;
+    color: var(--ink-soft);
+  }
+  .callout strong { color: var(--ink); }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  .table-wrap { overflow-x: auto; }
+  th {
+    text-align: left;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    padding: 0.5rem 1rem 0.5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 0.55rem 1rem 0.55rem 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  td code { white-space: nowrap; }
+
+  .mermaid-wrap { overflow-x: auto; margin: 1.5rem 0; }
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    color: var(--ink-faint);
+    font-size: 0.85rem;
+  }
+</style></head><body>
+<main>
+  <p class="eyebrow">TowPilot · Developer Guide</p>
+  <h1>Implementing OAuth&nbsp;2.0 with TowPilot</h1>
+  <p class="lede">
+    TowPilot is an OAuth&nbsp;2.0 authorization server. Your application can let
+    TowPilot users sign in with their existing account and grant it scoped access
+    to their data — the same mechanism that powers
+    <strong>chat.towpilot.ai</strong> and AI agents connecting over MCP.
+  </p>
+
+  <h2>What you can build</h2>
+  <ul>
+    <li><strong>Sign in with TowPilot</strong> — authenticate users without handling their credentials.</li>
+    <li><strong>Scoped API access</strong> — call the TowPilot API on a user's behalf, limited to the scopes they approved.</li>
+    <li><strong>AI agents over MCP</strong> — connect agents to the TowPilot MCP server with a user-authorized token instead of shared secrets.</li>
+  </ul>
+
+  <h2>Before you start</h2>
+  <p>
+    Every integration needs a registered client. Registration gives you a
+    <code>client_id</code> and pins your exact redirect URIs. To register an
+    application, contact the TowPilot team.
+  </p>
+  <div class="callout">
+    <strong>Browser and mobile apps are public clients.</strong> They never
+    receive a client secret — the flow below relies on PKCE instead, which is
+    mandatory for all clients.
+  </div>
+
+  <h2>The flow at a glance</h2>
+  <p>
+    TowPilot implements the standard <strong>Authorization Code flow with
+    PKCE</strong>. Endpoint locations are published through standard OAuth
+    discovery metadata provided with your client registration.
+  </p>
+  <div class="mermaid-wrap">
+<pre class="mermaid">
+sequenceDiagram
+    participant App as Your app
+    participant TP as TowPilot
+    participant API as TowPilot API
+    App->>TP: Redirect to /oauth/authorize (client_id, PKCE challenge, state)
+    TP->>TP: User signs in and reviews consent
+    TP->>App: Redirect back with authorization code
+    App->>TP: Exchange code + PKCE verifier for tokens
+    TP->>App: Access token (+ refresh token)
+    App->>API: Requests with Authorization: Bearer
+</pre>
+  </div>
+
+  <h2>Step by step</h2>
+  <ol class="steps">
+    <li>
+      <h3>Send the user to authorize</h3>
+      <p>
+        Generate a random <code>state</code> and a PKCE
+        <code>code_verifier</code>/<code>code_challenge</code> pair, then
+        redirect the user:
+      </p>
+      <pre><code>https://app.towpilot.ai/oauth/authorize
+  ?client_id=<span class="hl">YOUR_CLIENT_ID</span>
+  &amp;redirect_uri=<span class="hl">https://yourapp.example/callback</span>
+  &amp;response_type=code
+  &amp;scope=<span class="hl">openid email profile</span>
+  &amp;state=<span class="hl">RANDOM_STATE</span>
+  &amp;code_challenge=<span class="hl">PKCE_CHALLENGE</span>
+  &amp;code_challenge_method=S256</code></pre>
+      <p>
+        The user signs in with their TowPilot account (or is already signed in)
+        and sees a consent screen naming your app and the access it requests.
+      </p>
+    </li>
+    <li>
+      <h3>Receive the code on your callback</h3>
+      <p>
+        On approval, TowPilot redirects to your registered
+        <code>redirect_uri</code> with <code>?code=…&amp;state=…</code>.
+        Verify that <code>state</code> matches what you sent before doing
+        anything else.
+      </p>
+    </li>
+    <li>
+      <h3>Exchange the code for tokens</h3>
+      <p>
+        POST the code and your PKCE <code>code_verifier</code> to the token
+        endpoint from the discovery metadata:
+      </p>
+      <pre><code>POST /oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&amp;code=<span class="hl">AUTHORIZATION_CODE</span>
+&amp;client_id=<span class="hl">YOUR_CLIENT_ID</span>
+&amp;redirect_uri=<span class="hl">https://yourapp.example/callback</span>
+&amp;code_verifier=<span class="hl">PKCE_VERIFIER</span></code></pre>
+      <p>
+        The response contains a short-lived <code>access_token</code> and,
+        where the grant allows it, a <code>refresh_token</code>.
+      </p>
+    </li>
+    <li>
+      <h3>Call the API</h3>
+      <pre><code>GET https://app.towpilot.ai/api/…
+Authorization: Bearer <span class="hl">ACCESS_TOKEN</span></code></pre>
+      <p>
+        Authorization is resolved server-side on every request: the token
+        identifies the user, and TowPilot determines what that user may reach.
+        Tokens never embed roles or permissions, so access reflects the user's
+        current standing — revoke a member, and their tokens stop working with
+        them.
+      </p>
+    </li>
+    <li>
+      <h3>Refresh when the access token expires</h3>
+      <pre><code>POST /oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&amp;refresh_token=<span class="hl">REFRESH_TOKEN</span>
+&amp;client_id=<span class="hl">YOUR_CLIENT_ID</span></code></pre>
+    </li>
+  </ol>
+
+  <h2>Connecting AI agents over MCP</h2>
+  <p>
+    The TowPilot MCP server speaks the same OAuth. An MCP-capable client
+    (Claude, or any agent runtime that supports OAuth for MCP) pointed at the
+    TowPilot MCP endpoint discovers the authorization server automatically via
+    protected-resource metadata, walks the user through the same sign-in and
+    consent, and receives a token scoped to that user.
+  </p>
+  <ul>
+    <li>No shared API keys — each agent connection is authorized by a real user.</li>
+    <li>Access is bounded by the user's own reach and the scopes they approved.</li>
+    <li>Revoking the user's grant cuts the agent off immediately.</li>
+  </ul>
+
+  <h2>Security requirements</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Requirement</th><th>Why</th></tr>
+    <tr>
+      <td><strong>PKCE, always</strong></td>
+      <td>Protects the code exchange even for clients that cannot hold a secret.</td>
+    </tr>
+    <tr>
+      <td><strong>Exact redirect URIs</strong></td>
+      <td>Only pre-registered URIs are honored — no wildcards, HTTPS only.</td>
+    </tr>
+    <tr>
+      <td><strong>Verify <code>state</code></strong></td>
+      <td>Binds the callback to the session that started the flow (CSRF protection).</td>
+    </tr>
+    <tr>
+      <td><strong>Tokens stay out of URLs</strong></td>
+      <td>Send access tokens only in the <code>Authorization</code> header.</td>
+    </tr>
+    <tr>
+      <td><strong>Short-lived access tokens</strong></td>
+      <td>Plan for expiry; use the refresh grant rather than long-lived tokens.</td>
+    </tr>
+  </table>
+  </div>
+
+  <h2>Getting access</h2>
+  <p>
+    Client registration is currently by request. Reach out to the TowPilot team
+    with your application name, a short description, and your redirect URIs —
+    you'll receive a <code>client_id</code> and the discovery metadata for your
+    environment.
+  </p>
+
+  <footer>
+    TowPilot · OAuth 2.0 integration guide · Standards: OAuth 2.0 (RFC 6749),
+    PKCE (RFC 7636), OAuth discovery metadata (RFC 8414)
+  </footer>
+</main>
+</body></html>
