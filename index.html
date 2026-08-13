@@ -238,9 +238,24 @@
   <h2>Before you start</h2>
   <p>
     Every integration needs a registered client. Registration gives you a
-    <code>client_id</code> and pins your exact redirect URIs. To register an
-    application, contact the TowPilot team.
+    <code>client_id</code> and pins your exact redirect URIs. There are two
+    tiers, and which one you have decides what your integration can reach:
   </p>
+  <ul>
+    <li>
+      <strong>Registered clients</strong> — set up by the TowPilot team. Only
+      these may request <code>full_access</code>, the scope that unlocks the
+      TowPilot API and the MCP data tools.
+    </li>
+    <li>
+      <strong>Self-service clients</strong> — the MCP endpoint also accepts
+      dynamic client registration (RFC&nbsp;7591), which most MCP-capable
+      clients perform on their own. These are capped at
+      <code>openid email profile offline_access</code>: they can sign a user in,
+      but their tokens cannot read TowPilot data. If your integration needs
+      data, ask for a registered client.
+    </li>
+  </ul>
   <div class="callout">
     <strong>Browser and mobile apps are public clients.</strong> They never
     receive a client secret — the flow below relies on PKCE instead, which is
@@ -250,9 +265,27 @@
   <h2>The flow at a glance</h2>
   <p>
     TowPilot implements the standard <strong>Authorization Code flow with
-    PKCE</strong>. Endpoint locations are published through standard OAuth
-    discovery metadata provided with your client registration.
+    PKCE</strong>, plus one TowPilot-specific hop: the access token you receive
+    is exchanged for a short-lived <strong>session JWT</strong>, and that is
+    what the API authenticates.
   </p>
+  <p>
+    Endpoint locations come from discovery metadata. Fetch it rather than
+    hard-coding paths — they differ between the direct and MCP flows:
+  </p>
+  <ul>
+    <li>
+      <strong>Direct API integrations</strong> —
+      <code>https://stytch.towpilot.ai/.well-known/openid-configuration</code>
+    </li>
+    <li>
+      <strong>MCP clients</strong> —
+      <code>https://mcp.towpilot.ai/.well-known/oauth-protected-resource</code>,
+      which names the authorization server to use (RFC&nbsp;9728). That server
+      may be the MCP server itself rather than Stytch, so read the metadata per
+      environment instead of assuming.
+    </li>
+  </ul>
   <div class="mermaid-wrap">
 <pre class="mermaid">
 sequenceDiagram
@@ -264,7 +297,9 @@ sequenceDiagram
     TP->>App: Redirect back with authorization code
     App->>TP: Exchange code + PKCE verifier for tokens
     TP->>App: Access token (+ refresh token)
-    App->>API: Requests with Authorization: Bearer
+    App->>API: POST /auth/exchange with the access token
+    API->>App: Session JWT (~5 minutes)
+    App->>API: Requests with Authorization: Bearer session JWT
 </pre>
   </div>
 
@@ -281,7 +316,7 @@ sequenceDiagram
   ?client_id=<span class="hl">YOUR_CLIENT_ID</span>
   &amp;redirect_uri=<span class="hl">https://yourapp.example/callback</span>
   &amp;response_type=code
-  &amp;scope=<span class="hl">openid email profile</span>
+  &amp;scope=<span class="hl">openid email profile offline_access full_access</span>
   &amp;state=<span class="hl">RANDOM_STATE</span>
   &amp;code_challenge=<span class="hl">PKCE_CHALLENGE</span>
   &amp;code_challenge_method=S256</code></pre>
@@ -289,6 +324,17 @@ sequenceDiagram
         The user signs in with their TowPilot account (or is already signed in)
         and sees a consent screen naming your app and the access it requests.
       </p>
+      <div class="callout">
+        <strong>Ask for the scopes you need.</strong> The advertised set is
+        <code>openid</code>, <code>profile</code>, <code>email</code>,
+        <code>phone</code>, <code>offline_access</code> and
+        <code>full_access</code>. Two of them are load-bearing:
+        <code>full_access</code> is required to reach the API at all (step 4),
+        and <code>offline_access</code> is required to receive a
+        <code>refresh_token</code>. Requesting <code>full_access</code> only
+        works for registered clients — a self-service client gets the default
+        set no matter what it asks for.
+      </div>
     </li>
     <li>
       <h3>Receive the code on your callback</h3>
@@ -302,10 +348,11 @@ sequenceDiagram
     <li>
       <h3>Exchange the code for tokens</h3>
       <p>
-        POST the code and your PKCE <code>code_verifier</code> to the token
-        endpoint from the discovery metadata:
+        POST the code and your PKCE <code>code_verifier</code> to the
+        <code>token_endpoint</code> from your discovery metadata. For direct
+        integrations that is:
       </p>
-      <pre><code>POST /oauth2/token
+      <pre><code>POST https://stytch.towpilot.ai/v1/oauth2/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code
@@ -314,14 +361,39 @@ grant_type=authorization_code
 &amp;redirect_uri=<span class="hl">https://yourapp.example/callback</span>
 &amp;code_verifier=<span class="hl">PKCE_VERIFIER</span></code></pre>
       <p>
-        The response contains a short-lived <code>access_token</code> and,
-        where the grant allows it, a <code>refresh_token</code>.
+        The response contains an <code>access_token</code> and, if you asked for
+        <code>offline_access</code>, a <code>refresh_token</code>. MCP clients
+        use the <code>token_endpoint</code> their own discovery metadata names,
+        which is not necessarily this host.
       </p>
+    </li>
+    <li>
+      <h3>Exchange the access token for a session JWT</h3>
+      <p>
+        The TowPilot API does not authenticate access tokens — it authenticates
+        a Stytch <strong>session JWT</strong> (or a company API key). Trade one
+        for the other:
+      </p>
+      <pre><code>POST https://app.towpilot.ai/api/auth/exchange
+Authorization: Bearer <span class="hl">ACCESS_TOKEN</span></code></pre>
+      <p>
+        The response is <code>{"session_jwt": "…"}</code>. Only a
+        <code>full_access</code> token can be exchanged; anything else is
+        rejected here, which is where an under-scoped integration discovers it
+        has no data access.
+      </p>
+      <div class="callout">
+        <strong>Cache the session JWT.</strong> It lives about five minutes
+        while the access token lives much longer, so hold the access token and
+        re-exchange shortly before the session JWT goes stale. This endpoint is
+        rate-limited (10 requests per minute) — exchanging per API call will
+        trip it. The exchange is not idempotent: do not retry it blindly.
+      </div>
     </li>
     <li>
       <h3>Call the API</h3>
       <pre><code>GET https://app.towpilot.ai/api/…
-Authorization: Bearer <span class="hl">ACCESS_TOKEN</span></code></pre>
+Authorization: Bearer <span class="hl">SESSION_JWT</span></code></pre>
       <p>
         Authorization is resolved server-side on every request: the token
         identifies the user, and TowPilot determines what that user may reach.
@@ -332,28 +404,46 @@ Authorization: Bearer <span class="hl">ACCESS_TOKEN</span></code></pre>
     </li>
     <li>
       <h3>Refresh when the access token expires</h3>
-      <pre><code>POST /oauth2/token
+      <pre><code>POST https://stytch.towpilot.ai/v1/oauth2/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=refresh_token
 &amp;refresh_token=<span class="hl">REFRESH_TOKEN</span>
 &amp;client_id=<span class="hl">YOUR_CLIENT_ID</span></code></pre>
+      <p>
+        This requires the <code>offline_access</code> scope on the original
+        grant. Check <code>grant_types_supported</code> in the discovery
+        metadata for the authorization server you are actually talking to — it
+        differs between the direct and MCP flows. Refreshing yields a new access
+        token, so exchange it again (step 4) for a session JWT.
+      </p>
     </li>
   </ol>
 
   <h2>Connecting AI agents over MCP</h2>
   <p>
-    The TowPilot MCP server speaks the same OAuth. An MCP-capable client
-    (Claude, or any agent runtime that supports OAuth for MCP) pointed at the
-    TowPilot MCP endpoint discovers the authorization server automatically via
-    protected-resource metadata, walks the user through the same sign-in and
-    consent, and receives a token scoped to that user.
+    The TowPilot MCP server speaks the same OAuth. Point an MCP-capable client
+    (Claude, or any agent runtime that supports OAuth for MCP) at:
+  </p>
+  <pre><code>https://mcp.towpilot.ai/mcp</code></pre>
+  <p>
+    It discovers the authorization server from the protected-resource metadata,
+    registers itself, walks the user through the same sign-in and consent, and
+    receives a token scoped to that user.
   </p>
   <ul>
     <li>No shared API keys — each agent connection is authorized by a real user.</li>
     <li>Access is bounded by the user's own reach and the scopes they approved.</li>
     <li>Revoking the user's grant cuts the agent off immediately.</li>
   </ul>
+  <div class="callout">
+    <strong>Signing in is not the same as having access.</strong> A client that
+    registered itself is capped at
+    <code>openid email profile offline_access</code>, so its token cannot be
+    exchanged for a session JWT and every data tool stays closed — the OAuth
+    handshake succeeds and the first real call fails. Agents that need TowPilot
+    data need a registered client (see <em>Getting access</em>).
+  </div>
 
   <h2>Security requirements</h2>
   <div class="table-wrap">
@@ -365,7 +455,11 @@ grant_type=refresh_token
     </tr>
     <tr>
       <td><strong>Exact redirect URIs</strong></td>
-      <td>Only pre-registered URIs are honored — no wildcards, HTTPS only.</td>
+      <td>Only URIs registered in advance are honored, matched exactly. Register every callback you use, including local development ones.</td>
+    </tr>
+    <tr>
+      <td><strong>Exchange, don't improvise</strong></td>
+      <td>The API authenticates session JWTs, not access tokens. Keep the access token server-side and treat the exchanged session JWT as the short-lived credential.</td>
     </tr>
     <tr>
       <td><strong>Verify <code>state</code></strong></td>
@@ -384,15 +478,22 @@ grant_type=refresh_token
 
   <h2>Getting access</h2>
   <p>
-    Client registration is currently by request. Reach out to the TowPilot team
-    with your application name, a short description, and your redirect URIs —
-    you'll receive a <code>client_id</code> and the discovery metadata for your
+    Anything that reads TowPilot data needs a registered client, and that is by
+    request. Reach out to the TowPilot team with your application name, a short
+    description, and your redirect URIs — you'll receive a <code>client_id</code>
+    scoped for <code>full_access</code> and the discovery metadata for your
     environment.
+  </p>
+  <p>
+    Self-service dynamic registration is available at the MCP endpoint and needs
+    no involvement from us, but it is sign-in only. Start there if all you need
+    is identity; ask for a registered client the moment you need data.
   </p>
 
   <footer>
     TowPilot · OAuth 2.0 integration guide · Standards: OAuth 2.0 (RFC 6749),
-    PKCE (RFC 7636), OAuth discovery metadata (RFC 8414)
+    PKCE (RFC 7636), OAuth discovery metadata (RFC 8414), protected-resource
+    metadata (RFC 9728), dynamic client registration (RFC 7591)
   </footer>
 </main>
 </body></html>
